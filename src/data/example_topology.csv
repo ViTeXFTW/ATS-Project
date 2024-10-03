@@ -1,3 +1,4 @@
+DeviceType,DeviceName,Ports,(optional)Domain
 SW,SW_0,8,0,,,
 SW,SW_28,8,0,,,
 SW,SW_119,8,0,,,
