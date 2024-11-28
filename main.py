@@ -9,6 +9,8 @@ topology_path = './input_files/small-topology.v2.csv'
 # Load streams.csv file with explicit daelimiter and updated headers
 streams_df = pd.read_csv(streams_path, header=0)
 
+index = 0
+
 class Node:
     def __init__(self, typeNode, name, ports, queues):
         self.typeNode = typeNode
@@ -34,8 +36,9 @@ def process_topology_file(filepath):
         for row in reader:
             if row[0] == 'SW':
                 temp_dict = {}
-                ports = int(row[2])
+                ports = int(row[2]) + index
                 for i in range(ports):
+                    i += index
                     temp_dict[str(i)] = {}
                 node_dict[row[1]] = Node(row[0], row[1], row[2], temp_dict)
             elif row[0] == 'ES':
@@ -89,6 +92,8 @@ def new_calculate_shortest_paths(G, streams_df):
             # Get the edge data to find which ports are used
             edge_data1 = G[src_node][cur_node]
             edge_data2 = G[cur_node][dst_node]
+            link_data1 = edge_data1['link_name']
+            link_data2 = edge_data2['link_name']
             src_port = edge_data1['src_port'][src_node]
             cur_dst_port = edge_data1['src_port'][cur_node]
             cur_src_port = edge_data2['src_port'][cur_node]
@@ -100,7 +105,9 @@ def new_calculate_shortest_paths(G, streams_df):
                 'cur_dst_port': cur_dst_port,
                 'cur_src_port': cur_src_port,
                 'to_node': dst_node,
-                'dst_port': dst_port
+                'dst_port': dst_port,
+                'link_data1': link_data1,
+                'link_data2': link_data2
             })
         print(stream['StreamName'], " ", path_with_ports)
         # Store the path with port details for this stream
@@ -163,17 +170,17 @@ def PopuQueues():
         pcp = streams_df[streams_df['StreamName'] == stream_id]['PCP'].values[0]
         size = streams_df[streams_df['StreamName'] == stream_id]['Size'].values[0]
         rate = streams_df[streams_df['StreamName'] == stream_id]['Rate (r)'].values[0]
-        for item in path:
-            node = node_dict.get(item['from_node'])
+        for step in path:
+            node = node_dict.get(step['from_node'])
             if node is not None and node.typeNode == "ES":
-                port = item['src_port']
+                port = step['src_port']
                 if node.queues[port].get(pcp) is not None:
                     node.queues[port][pcp].append(Stream(stream_id, size, rate))
                 else:
                     node.queues[port][pcp] = [Stream(stream_id, size, rate)]
-            node = node_dict.get(item['cur_node'])
-            outport = item['cur_src_port']
-            inport = item['cur_dst_port']
+            node = node_dict.get(step['cur_node'])
+            outport = step['cur_src_port']
+            inport = step['cur_dst_port']
             if node.queues[outport].get(pcp) is None:
                 node.queues[outport][pcp] = {inport: [Stream(stream_id, size, rate)]}
             elif node.queues[outport][pcp].get(inport) is not None:
@@ -199,64 +206,89 @@ PopuQueues()
 
 
 def getMAX2E():
-    for s_id, path in new_shortest_paths.items():
-        pcp = streams_df[streams_df['StreamName'] == s_id]['PCP'].values[0]
-        size = streams_df[streams_df['StreamName'] == s_id]['Size'].values[0]
-        rate = streams_df[streams_df['StreamName'] == s_id]['Rate (r)'].values[0]
-        delay = 0
-        r = 1e9
-        for item in path:
-            bH = 0
-            bC = 0
-            rH = 0
-            L = 0
-            node = node_dict.get(item['from_node'])
-            if node is not None and node.typeNode == "ES":
-                port = item['src_port']
-                portQueues = node.queues[port]
-                for priority, list in portQueues.items():
-                    if priority > pcp:
-                        for stream in list:
-                            bH += stream.size
-                            rH += stream.rate
-                    elif priority == pcp:
-                        for stream in list:
-                            if stream.name != s_id:
-                                bC += stream.size
-                    else:
-                        for stream in list:
-                            if stream.size > L:
-                                L = stream.size
-                delay += (bH + bC + L) / (r - rH) + size / r
-                print(s_id, " ", ( (bH + bC + L) / (r - rH) + size / r) * 1e6)
+    with open("./solution.csv", "w", newline="") as solutionFile:
+        writer = csv.writer(solutionFile)
+        writer.writerow(["StreamName", "MaxE2E(us)", "Deadline(us)", "Path"])
+        for s_id, path in new_shortest_paths.items():
+            pcp = streams_df[streams_df['StreamName'] == s_id]['PCP'].values[0]
+            size = streams_df[streams_df['StreamName'] == s_id]['Size'].values[0]
+            rate = streams_df[streams_df['StreamName'] == s_id]['Rate (r)'].values[0]
+            delay = 0
+            r = 1e9
+            pathStr = ""
+            for item in path:
                 bH = 0
                 bC = 0
                 rH = 0
                 L = 0
+                node = node_dict.get(item['from_node'])
+                if node is not None and node.typeNode == "ES":
+                    port = item['src_port']
+                    portQueues = node.queues[port]
+                    for priority, list in portQueues.items():
+                        if priority > pcp:
+                            for stream in list:
+                                bH += stream.size
+                                rH += stream.rate
+                        elif priority == pcp:
+                            for stream in list:
+                                if stream.name != s_id:
+                                    bC += stream.size
+                        else:
+                            for stream in list:
+                                if stream.size > L:
+                                    L = stream.size
+                    delay += (bH + bC + L) / (r - rH) + size / r
+                    print(s_id, " ", ( (bH + bC + L) / (r - rH) + size / r) * 1e6)
+                    pathStr += node.name
+                    pathStr += ":"
+                    pathStr += item['link_data1']
+                    pathStr += ":"
+                    pathStr += item['cur_dst_port']
+                    pathStr += "->"
+                    bH = 0
+                    bC = 0
+                    rH = 0
+                    L = 0
 
-            node = node_dict.get(item['cur_node'])
-            outport = item['cur_src_port']
-            inport = item['cur_dst_port']
-            portQueues = node.queues[outport]
-            for priority, pairs in portQueues.items():
-                for port, list in pairs.items():
-                    if priority > pcp:
-                        for stream in list:
-                            bH += stream.size
-                            rH += stream.rate
-                    elif priority == pcp:
-                        for stream in list:
-                            if stream.name != s_id:
-                                bC += stream.size
-                    else:
-                        for stream in list:
-                            if stream.size > L:
-                                L = stream.size
-            delay += (bH + bC + L) / (r - rH) + size / r
-            print(s_id, " ", ( (bH + bC + L) / (r - rH) + size / r) * 1e6)
+                node = node_dict.get(item['cur_node'])
+                outport = item['cur_src_port']
+                inport = item['cur_dst_port']
+                portQueues = node.queues[outport]
+                for priority, pairs in portQueues.items():
+                    for port, list in pairs.items():
+                        if priority > pcp:
+                            for stream in list:
+                                bH += stream.size
+                                rH += stream.rate
+                        elif priority == pcp:
+                            for stream in list:
+                                if stream.name != s_id:
+                                    bC += stream.size
+                        else:
+                            for stream in list:
+                                if stream.size > L:
+                                    L = stream.size
+                delay += (bH + bC + L) / (r - rH) + size / r
+                print(s_id, " ", ( (bH + bC + L) / (r - rH) + size / r) * 1e6)
+                pathStr += node.name
+                pathStr += ":"
+                pathStr += item['link_data2']
+                pathStr += ":"
+                pathStr += item['dst_port']
+                pathStr += "->"
 
-        delay *= 1e6
-        print("Stream: ", s_id, " delay: ", delay)
+                node = node_dict.get(item['to_node'])
+                if node is not None and node.typeNode == "ES":
+                    pathStr += node.name
+
+            delay *= 1e6
+            delay = round(delay, 2)
+            print("Stream, ", s_id, " delay, ", delay, " path, ", pathStr)
+            deadline = streams_df[streams_df['StreamName'] == s_id]['Deadline'].values[0]
+            writer.writerow([s_id, delay, deadline, pathStr])
+
+        solutionFile.close()
 
 getMAX2E()
 
@@ -293,35 +325,3 @@ def getATSWorstCaseDelay(stream_id):
         delay += (bH + bC + lL) / (r - rH) + size / r
     delay *= 1e6
     return delay
-
-
-# Display the streams data with calculated rates (leaky bucket)
-print("Streams Data with Leaky Bucket Rates:")
-print(streams_df.head())  # Print the first few rows of the streams dataframe
-
-# Display shortest paths, transmission times, and deadlines
-print("\nShortest paths, transmission times, deadlines, and maxE2E for each stream:")
-for stream_id, path in shortest_paths.items():
-    # Extract deadline for each stream
-    filtered_df = streams_df[streams_df['StreamName'].str.strip() == stream_id.strip()]
-    if not filtered_df.empty:
-        deadline = filtered_df['Deadline'].values[0]
-    else:
-        print(f"Warning: Stream ID {stream_id} not found in dataframe!")
-        deadline = "N/A"
-
-    # Calculate transmission time in microseconds
-
-
-    # In this case, maxE2E is based on the transmission time, but you could include other logic here to calculate WCD
-    max_e2e = getATSWorstCaseDelay(stream_id)  # This can be adjusted as needed if the calculation differs
-
-    # Display the results
-    print(
-        f"{stream_id}: Path: {path}, Deadline: {deadline} us, maxE2E: {max_e2e:.6f} us, rate: {streams_df[streams_df['StreamName'] == stream_id]['Rate (r)'].values[0]} bps")
-
-    # Check if the flow meets its deadline
-    if max_e2e <= deadline:
-        print(f"  Status: Flow meets the deadline!")
-    else:
-        print(f"  Status: Flow exceeds the deadline.")

@@ -1,5 +1,7 @@
 # Setup and Run Instructions
 
+> **Important:** This program uses topology where the ports are zero-indexed.
+
 ## (Optional) Create Virtual Environment
 If you don't have `venv` installed, run:
 ```plaintext
@@ -34,3 +36,31 @@ Once you are done, you can deactivate the virtual environment by running:
 ```plaintext
 >$ deactivate
 ```
+
+## Input Files Requirements
+
+The program expects two input CSV files in the `./input_files/` directory:
+- `small-streams.v2.csv`
+- `small-topology.v2.csv`
+
+### Topology File Format
+The topology file should contain rows in the following formats:
+- Switch definition: `SW,<switch_name>,<number_of_ports>`
+- End System definition: `ES,<system_name>,<number_of_ports>`
+- Link definition: `LINK,<link_name>,<source_node>,<source_port>,<destination_node>,<destination_port>`
+
+### Streams File Format
+The streams file should contain columns for:
+- StreamName
+- SourceNode
+- DestinationNode
+- Size
+- Period
+- PCP (Priority Code Point)
+
+## Output
+The program will generate a solution file containing:
+- StreamName
+- MaxE2E(us)
+- Deadline(us)
+- Path
