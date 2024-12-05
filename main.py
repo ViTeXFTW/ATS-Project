@@ -9,7 +9,14 @@ topology_path = './input_files/small-topology.v2.csv'
 # Load streams.csv file with explicit daelimiter and updated headers
 streams_df = pd.read_csv(streams_path, header=0)
 
-index = 0
+header = True
+index = 1
+
+if header:
+    streams_df = pd.read_csv(streams_path, header=0)
+else:
+    colnames = ["PCP", "StreamName", "StreamType", "SourceNode", "DestinationNode","Size", "Period", "Deadline"]
+    streams_df = pd.read_csv(streams_path, names=colnames, header=None)
 
 class Node:
     def __init__(self, typeNode, name, ports, queues):
