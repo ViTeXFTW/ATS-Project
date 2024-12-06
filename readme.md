@@ -1,6 +1,6 @@
 # Setup and Run Instructions
 
-> **Important:** This program uses topology where the ports are zero-indexed.
+> **Important**: Update the index and header variable in the top of main.py to match the topology used. Header flag is true if there is a header in the topology.csv file, index is either 0 or 1 depending on the indexing in topology.csv
 
 ## (Optional) Create Virtual Environment
 If you don't have `venv` installed, run:
